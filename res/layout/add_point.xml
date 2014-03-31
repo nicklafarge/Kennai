@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:paddingTop="16dp" >
+    
+    <EditText
+        android:id="@+id/search_add_address"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignBottom="@+id/add_address"
+        android:layout_toLeftOf="@id/add_address"
+        android:ems="10" 
+        android:text=""
+        android:hint="@string/enter_address" />
+
+    <Button
+        android:id="@id/add_address"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/add_item"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentTop="true" />
+
+    <ListView
+        android:id="@android:id/list"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:drawSelectorOnTop="false"
+        android:layout_below="@id/search_add_address" />
+
+</RelativeLayout>
