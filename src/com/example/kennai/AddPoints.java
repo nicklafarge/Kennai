@@ -71,7 +71,6 @@ public class AddPoints extends ListActivity {
 		
 		//一番最初にMainActivityを実行する時だけdispをリセットする
 		if(firstTimeOnly) {
-			Toast.makeText(this, "first time only", Toast.LENGTH_SHORT).show();
 			disp.clear();
 			for(MarkerOptions m : MapOptions.getPoints()) {
 				disp.add(m.getTitle());
