@@ -41,7 +41,7 @@ public class AddPoints extends ListActivity {
 	private Geocoder geocoder; 
 	
 	//設定のアクティビティに「マップのリセット」を押すとdispもリセットする
-	private static boolean reset = false; 
+	private static boolean reset; 
 
 	//一番最初にMainActivityを実行する時だけdispをリセットする
 	private boolean firstTimeOnly = true;
@@ -57,13 +57,21 @@ public class AddPoints extends ListActivity {
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.add_point);
+		
+		//変数をインスタンス化する
 		adapter=new ArrayAdapter<String>(this,
 				android.R.layout.simple_list_item_1,
 				disp);			
 		setListAdapter(adapter);
 		geocoder = new Geocoder(this);
 		MapsInitializer.initialize(getApplicationContext());
+		final EditText searchAddressEditText = (EditText) findViewById(R.id.search_add_address);
+		final Button addAddressButton = (Button) findViewById(R.id.add_address);
+		final ListView pointsListView = (ListView) findViewById(android.R.id.list);
+		
+		//一番最初にMainActivityを実行する時だけdispをリセットする
 		if(firstTimeOnly) {
+			Toast.makeText(this, "first time only", Toast.LENGTH_SHORT).show();
 			disp.clear();
 			for(MarkerOptions m : MapOptions.getPoints()) {
 				disp.add(m.getTitle());
@@ -71,16 +79,14 @@ public class AddPoints extends ListActivity {
 			firstTimeOnly = false;
 		}
 		
+		//設定でリセットボタンを押したら記録をリセットする
 		if(reset) {
 			disp.clear();
 			reset = false;
 		}
 		
-		final EditText et = (EditText) findViewById(R.id.search_add_address);
-		final Button b = (Button) findViewById(R.id.add_address);
-		final ListView lv = (ListView) findViewById(android.R.id.list);
-
-		lv.setOnItemLongClickListener(new OnItemLongClickListener() {
+		//リストに入っている地点を長押ししたら、その地点を削除するかどうかのダイアログボックスを表示する
+		pointsListView.setOnItemLongClickListener(new OnItemLongClickListener() {
 			@Override
 			public boolean onItemLongClick(AdapterView<?> parent, View view,
 					int position, long id) {
@@ -88,21 +94,22 @@ public class AddPoints extends ListActivity {
 				return true;
 			}
 		});
-
-		b.setOnClickListener(new View.OnClickListener() {
+		
+		//入力された住所を追加するためのButton
+		addAddressButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
-				String text=et.getText().toString();
+				String text=searchAddressEditText.getText().toString();
 				InputMethodManager imm = (InputMethodManager)getSystemService(
 						Context.INPUT_METHOD_SERVICE);
-				imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
+				imm.hideSoftInputFromWindow(searchAddressEditText.getWindowToken(), 0);
 				addAddress(text);
-				et.setText("");
-				et.setHint(getString(R.string.add_point));
-
+				searchAddressEditText.setText("");
+				searchAddressEditText.setHint(getString(R.string.add_point));
 				adapter.notifyDataSetChanged();
 			}
 		});
 	}
+	
 
 	/**
 	 * dispとMapOptionsのpointsから入力されたインデックスの地点を削除する
@@ -111,10 +118,12 @@ public class AddPoints extends ListActivity {
 	private void removeItemFromList(int position) {
 		final int deletePosition = position;
 
+		//ダイアログボックスを作成して表示する
 		AlertDialog.Builder alert = new AlertDialog.Builder(AddPoints.this);
-
 		alert.setTitle(getString(R.string.delete));
 		alert.setMessage(getString(R.string.do_you_want_to_delete));
+		
+		//「はい」を押すと削除する
 		alert.setPositiveButton(getString(R.string.yes), new OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
@@ -123,13 +132,14 @@ public class AddPoints extends ListActivity {
 				adapter.notifyDataSetChanged();
 			}
 		});
+		//ダイアログボックスを閉じる
 		alert.setNegativeButton(getString(R.string.cancel), new OnClickListener() {
 			@Override
 			public void onClick(DialogInterface dialog, int which) {
 				dialog.dismiss();
 			}
 		});
-
+		
 		alert.show();
 
 	}
@@ -139,13 +149,13 @@ public class AddPoints extends ListActivity {
 	 * @param input　入力された住所
 	 */
 	private void addAddress(String input){
-
-		if(input != null) {
+		if(input != null && !input.isEmpty()) {
 			try {
 				List<Address> addresses = geocoder.getFromLocationName(input,5);
 				if(addresses != null && addresses.size() > 0) {
 					LatLng np = new LatLng(addresses.get(0).getLatitude(),addresses.get(0).getLongitude());
 					boolean newPoint = true;
+					
 					//同じ住所はリストに一回だけ入っているかチェックをする
 					for(int i=0; i<MapOptions.getPoints().size(); i++) {
 						if(MapOptions.getPoints().get(i).getTitle().equals(String.valueOf(addresses.get(0).getAddressLine(0)))) {
@@ -179,6 +189,7 @@ public class AddPoints extends ListActivity {
 			}
 		}
 	}
+	
 	
 	/**
 	 * dispをリセットするためのブーリアンをアップデート

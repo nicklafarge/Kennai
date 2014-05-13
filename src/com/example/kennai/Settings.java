@@ -4,9 +4,11 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
@@ -23,7 +25,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 /**
- *　設定を変化するためのアクティビティ
+ *　設定を変更するためのアクティビティ
  */
 public class Settings extends Activity{
 
@@ -39,17 +41,18 @@ public class Settings extends Activity{
 		setContentView(R.layout.settings);
 
 
-		final Button setCenterPoint = (Button) findViewById(R.id.center_point);
-		final Button addPoint = (Button) findViewById(R.id.add_point);
+		//ユーザインタフェースの変数をインスタンス化する
+		final Button setCenterPointButton = (Button) findViewById(R.id.center_point);
+		final Button addPointButton = (Button) findViewById(R.id.add_point);
 		final Spinner mapTypeSpinner = (Spinner) findViewById(R.id.map_type_spinner);
-		final CheckedTextView smileyCheck = (CheckedTextView) findViewById(R.id.smiley_mode);
-		final EditText et = (EditText) findViewById(R.id.circle_size_edit);
-		final Button b = (Button) findViewById(R.id.circle_size_button);
-		final Button resetMap = (Button) findViewById(R.id.reset_map);
+		final CheckedTextView smileyCheckedTextView = (CheckedTextView) findViewById(R.id.smiley_mode);
+		final EditText circleSizeEditText = (EditText) findViewById(R.id.circle_size_edit);
+		final Button circleSizeButton = (Button) findViewById(R.id.circle_size_button);
+		final Button resetMapButton = (Button) findViewById(R.id.reset_map);
 
 
 		//中心地点を変えるためのアクティビティを実行するためのButton
-		setCenterPoint.setOnClickListener(new View.OnClickListener() {
+		setCenterPointButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
 				Intent myIntent = new Intent(view.getContext(), CenterCord.class);
 				startActivityForResult(myIntent, 0);
@@ -58,7 +61,7 @@ public class Settings extends Activity{
 		});
 
 		//地点を追加／削除するためのアクティビティを実行するためのButton
-		addPoint.setOnClickListener(new View.OnClickListener() {
+		addPointButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
 				Intent myIntent = new Intent(view.getContext(), AddPoints.class);
 				startActivityForResult(myIntent, 0);
@@ -81,42 +84,47 @@ public class Settings extends Activity{
 		});
 
 		//新規ニコちゃんモードを変えるためのCheckedTextView
-		smileyCheck.setChecked(MapOptions.isSmileyMode());
-		smileyCheck.setOnClickListener(new View.OnClickListener() {
+		smileyCheckedTextView.setChecked(MapOptions.isSmileyMode());
+		smileyCheckedTextView.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
-				smileyCheck.toggle();
-				MapOptions.setSmileyMode(smileyCheck.isChecked());
+				smileyCheckedTextView.toggle();
+				MapOptions.setSmileyMode(smileyCheckedTextView.isChecked());
 			}
 		});
 
 		//円の半径を変えるためのEditText
-		if(MapOptions.getCenterCircle() != null)
-			et.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
-		b.setOnClickListener(new View.OnClickListener() {
+		if(MapOptions.getCenterCircle() != null) {
+			circleSizeEditText.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
+		}
+		circleSizeButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
-				String text=et.getText().toString();
-				InputMethodManager imm = (InputMethodManager)getSystemService(
-						Context.INPUT_METHOD_SERVICE);
-				imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
-				changeRadius(Double.parseDouble(text));
-				et.setText("");
-				et.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
+				String text=circleSizeEditText.getText().toString();
+				if (text != null && !text.isEmpty()) {
+					InputMethodManager imm = (InputMethodManager)getSystemService(
+							Context.INPUT_METHOD_SERVICE);
+					imm.hideSoftInputFromWindow(circleSizeEditText.getWindowToken(), 0);
+					changeRadius(Double.parseDouble(text));
+					circleSizeEditText.setText("");
+					circleSizeEditText.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
+				}
 			}
 		});
 
 		//マップをリセットするためのButton
-		resetMap.setOnClickListener(new View.OnClickListener() {
+		resetMapButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
 				AlertDialog.Builder alert = new AlertDialog.Builder(Settings.this);
 				alert.setTitle(getString(R.string.reset_map));
 				alert.setMessage(getString(R.string.are_you_sure_reset));
 
+				//「はい」を押すとリセットする
 				alert.setPositiveButton(getString(R.string.yes), new OnClickListener() {
 					@Override
 					public void onClick(DialogInterface dialog, int which) {
 						resetMap();
 					}
 				});
+				//ダイアログボックスを閉じる
 				alert.setNegativeButton(getString(R.string.cancel), new OnClickListener() {
 					@Override
 					public void onClick(DialogInterface dialog, int which) {
@@ -129,22 +137,26 @@ public class Settings extends Activity{
 		});
 
 	}
-	
+
 	/**
-	 * 円の半径を変化する
+	 * 円の半径を変更する
 	 * @param newRadius　新規の半径
 	 */
 	private void changeRadius(double newRadius) {
-		if(newRadius > 0 && newRadius <4000 && newRadius*1000.0 != MapOptions.getCenterCircle().getRadius()) {
+		//新規の半径を格納する
+		if(newRadius > 0 && newRadius <= 4000 && newRadius*1000.0 != MapOptions.getCenterCircle().getRadius()) {
 			MapOptions.getCenterCircle().radius(newRadius * 1000.0);
 			MapOptions.setCircleRadius(newRadius);
 			Toast.makeText(this, getString(R.string.radius_change), Toast.LENGTH_SHORT).show();
 		}
+		//新規の半径は０キロ以上
 		else if(newRadius <= 0) {
 			Toast.makeText(this, getString(R.string.radius_greater_than_zero), Toast.LENGTH_SHORT).show();
 		}
+		//新規の半径は４０００キロ以下
 		else
 			Toast.makeText(this, getString(R.string.radius_too_large), Toast.LENGTH_SHORT).show();
+		
 		MapOptions.updatePointColors(getApplicationContext());
 	}
 
@@ -152,6 +164,7 @@ public class Settings extends Activity{
 	 * マップをリセットする
 	 */
 	private void resetMap() {
+		//マップの設定をリセットする
 		MapOptions.setMapType(1);
 		MapOptions.setSmileyMode(false);
 		MapOptions.setCircleRadius(1);
@@ -166,16 +179,39 @@ public class Settings extends Activity{
 		.fillColor(0x95c2ffc2)
 		.strokeWidth(2)
 		.visible(false));
+		
+		
+		//記録されている情報
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor editor = sharedPreferences.edit();
+		editor.clear();
+		editor.commit();
+		
+		//MainActivityとAddPointsの記録
 		MainActivity.setReset(true);
 		AddPoints.setReset(true);
-		EditText et = (EditText) findViewById(R.id.circle_size_edit);
-		et.setText("");
-		et.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
+		
+		//円の半径のEditText
+		EditText circleSizeEditText = (EditText) findViewById(R.id.circle_size_edit);
+		circleSizeEditText.setText("");
+		circleSizeEditText.setHint(String.valueOf(MapOptions.getCircleRadius()) + " km");
+		
+		//マップの種類のSpinner
 		Spinner mapTypeSpinner = (Spinner) findViewById(R.id.map_type_spinner);
 		mapTypeSpinner.setSelection(MapOptions.getMapType()-1);
+		
+		//ニコちゃんモードのCheckedTextView
 		CheckedTextView smileyCheck = (CheckedTextView) findViewById(R.id.smiley_mode);
 		smileyCheck.setChecked(false);
-		
 	}
-
 }
+
+///**
+//* 戻るバタンを押すとMainActivityを実行する
+//* @see android.app.Activity#onBackPressed(android.os.Bundle)
+//*/
+//@Override
+//public void onBackPressed() {
+//	Intent myIntent = new Intent(this, MainActivity.class);
+//	startActivityForResult(myIntent,0);
+//}

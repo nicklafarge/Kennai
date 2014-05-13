@@ -1,20 +1,16 @@
 package com.example.kennai;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.List;
 
 import android.app.ListActivity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.location.Address;
 import android.location.Geocoder;
 import android.os.Bundle;
-import android.util.Log;
+import android.preference.PreferenceManager;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
@@ -31,7 +27,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 /**
- * 中心地点を変化するためのアクティビティ。中心地点の住所の記録を書き込んで、
+ * 中心地点を変更するためのアクティビティ。中心地点の住所の記録を書き込んで、
  * 記録のリストから住所を選ぶことも可能。
  */
 public class CenterCord extends ListActivity {
@@ -43,12 +39,6 @@ public class CenterCord extends ListActivity {
 
 	//dispをアップデートするAdapter
 	private ArrayAdapter<String> adapter;
-
-	//書き込まれるテキストファイルのタグ
-	private static final String TAG = CenterCord.class.getName();
-
-	//書き込まれるテキストファイルの名前
-	private static final String CENTER_CORD_FILE = "centercord.txt";
 
 	//住所を探すための変数
 	private Geocoder geocoder;
@@ -70,6 +60,7 @@ public class CenterCord extends ListActivity {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.set_center);
 
+
 		//クラス変数をインスタンス化する
 		geocoder = new Geocoder(this);
 		MapsInitializer.initialize(getApplicationContext());
@@ -77,28 +68,33 @@ public class CenterCord extends ListActivity {
 				android.R.layout.simple_list_item_1,
 				disp);			
 		setListAdapter(adapter);
-		final EditText et = (EditText) findViewById(R.id.search_address);
-		final Button b = (Button) findViewById(R.id.search_button);
-		final Button cl = (Button) findViewById(R.id.current_location);
-		final ListView lv = (ListView) findViewById(android.R.id.list);
+		
+		//ユーザインタフェースの変数をインスタンス化する
+		final EditText searchAddressEditText = (EditText) findViewById(R.id.search_address);
+		final Button searchButton = (Button) findViewById(R.id.search_button);
+		final Button currentLocationButton = (Button) findViewById(R.id.current_location);
+		final ListView centerCordHistoryListView = (ListView) findViewById(android.R.id.list);
 
 
-		//テキストファイルを読み込む
-		searchHistory = parseString(readFromFile());
-		writeToFile("");
+		//記録を読み込む
+		loadSavedHistory();
+		
+		//表示されている記録をクリアして、記録から読み込んで、表示する
 		disp.clear();
 		for(MarkerOptions m : searchHistory) {
 			disp.add(m.getSnippet());
 		}
-		if(reset)
-		{
+		
+		//設定でリセットボタンを押したら記録をリセットする
+		if(reset) {
 			disp.clear();
 			searchHistory.clear();
 			reset = false;
 		}
 
-		//ユーザーインタフェースの要素をインスタンス化する
-		lv.setOnItemClickListener(new OnItemClickListener() {
+		
+		//中心地点を変更するためのButtonのListenerをインスタンス化する
+		centerCordHistoryListView.setOnItemClickListener(new OnItemClickListener() {
 			@Override
 			public void onItemClick(AdapterView<?> adapter, View view, int position, long arg) {
 				setCenterFromList(position);
@@ -106,51 +102,47 @@ public class CenterCord extends ListActivity {
 			}
 		});
 
-		b.setOnClickListener(new View.OnClickListener() {
+		//入力された住所を検索するためのButton
+		searchButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
 				InputMethodManager imm = (InputMethodManager)getSystemService(
 						Context.INPUT_METHOD_SERVICE);
-				imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
-				setAddress(et.getText().toString());
-				et.setText("");
-
-				
+				imm.hideSoftInputFromWindow(searchAddressEditText.getWindowToken(), 0);
+				setAddress(searchAddressEditText.getText().toString());
+				searchAddressEditText.setText("");
 			}
 		});
 
-		cl.setOnClickListener(new View.OnClickListener() {
+		//中心地点の記録のリストから選ばれた住所を中心地点に格納するためのButton
+		currentLocationButton.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View view) {
 				InputMethodManager imm = (InputMethodManager)getSystemService(
 						Context.INPUT_METHOD_SERVICE);
-				imm.hideSoftInputFromWindow(et.getWindowToken(), 0);
-				et.setText("");
-
+				imm.hideSoftInputFromWindow(searchAddressEditText.getWindowToken(), 0);
+				searchAddressEditText.setText("");
 				setCenterFromCurrentLocation();
 			}
 		});
-
 	}
-	
+
 	/** 
-	 * 中心地点の記録をテキストファイルに書き込む
+	 * 中心地点の記録をSharedPreferencesに書き込む
 	 * @see android.app.Activity#onStop()
 	 */
 	@Override
 	public void onStop() {
 		super.onStop();
-		for(int i = searchHistory.size()-1;i>=0;i--) {
-			writeToFile(String.valueOf(searchHistory.get(i).getPosition().latitude) + " " + 
-					String.valueOf(searchHistory.get(i).getPosition().longitude) + " " + 
-					searchHistory.get(i).getSnippet() + "||" + readFromFile());
-		}
+		savePreferences(searchHistory);
 	}
-	
+
 	/**
 	 * 中心地点に現在地を格納する
 	 */
 	public void setCenterFromCurrentLocation() {
 		if(MapOptions.getCurrentLocation() != null) {
-			LatLng pos = new LatLng(MapOptions.getCurrentLocation().getLatitude(),MapOptions.getCurrentLocation().getLongitude());
+			//格納されている現在地を読み込んで、中心地点に格納する
+			LatLng pos = new LatLng(MapOptions.getCurrentLocation().getLatitude(),
+					MapOptions.getCurrentLocation().getLongitude());
 			MapOptions.setCenterPoint(new MarkerOptions()
 			.title(getString(R.string.center))
 			.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
@@ -158,14 +150,18 @@ public class CenterCord extends ListActivity {
 			.snippet(getString(R.string.current_loc)+": (" + String.valueOf(Math.round(pos.latitude*1000.0)/1000.0) + ", " + 
 					String.valueOf(Math.round(pos.longitude*1000.0)/1000.0) +")"));
 			MapOptions.setCenterCircle(MapOptions.getCenterCircle().center(pos));
-			//同じ現在地はリストに一回だけ入っているかチェックをする
+			
+			//同じ現在地が重複していないかチェックをする
+			LatLng centerPointPos = MapOptions.getCenterPoint().getPosition();
 			for(int i=0; i<searchHistory.size(); i++) {
-				if(searchHistory.get(i).getSnippet().contains(getString(R.string.current_loc)+": (")) {
-					double histLat = Math.round(searchHistory.get(i).getPosition().latitude*1000.0)/1000.0;
-					double histLon = Math.round(searchHistory.get(i).getPosition().longitude*1000.0)/1000.0;
-					double currentLat = Math.round(MapOptions.getCenterPoint().getPosition().latitude*1000.0)/1000.0;
-					double currentLon = Math.round(MapOptions.getCenterPoint().getPosition().longitude*1000.0)/1000.0;
+				MarkerOptions tempMO = searchHistory.get(i);
+				if(tempMO.getSnippet().contains(getString(R.string.current_loc)+": (")) {
+					double histLat = Math.round(tempMO.getPosition().latitude*1000.0)/1000.0;
+					double histLon = Math.round(tempMO.getPosition().longitude*1000.0)/1000.0;
+					double currentLat = Math.round(centerPointPos.latitude*1000.0)/1000.0;
+					double currentLon = Math.round(centerPointPos.longitude*1000.0)/1000.0;
 					if(histLat == currentLat && histLon == currentLon) {
+						//重複した現在地を削除する
 						searchHistory.remove(i);
 						disp.remove(i);
 						adapter.notifyDataSetChanged();
@@ -173,18 +169,16 @@ public class CenterCord extends ListActivity {
 					}
 				}
 			}
+			
+			//searchHistoryとdispに格納して、ユーザーに知らせる
 			searchHistory.add(0,MapOptions.getCenterPoint());
 			disp.add(0,MapOptions.getCenterPoint().getSnippet());
-
-
 			adapter.notifyDataSetChanged();
 			Toast.makeText(this, getString(R.string.center_point_changed), Toast.LENGTH_SHORT).show();
-			if(!MapOptions.getCenterPoint().isVisible()) {
-				MapOptions.getCenterPoint().visible(true);
-			}
-			if(!MapOptions.getCenterCircle().isVisible()) {
-				MapOptions.getCenterCircle().visible(true);
-			}
+			
+			//中心地点と円を表示する
+			MapOptions.getCenterPoint().visible(true);
+			MapOptions.getCenterCircle().visible(true);
 		}
 	}
 
@@ -193,19 +187,21 @@ public class CenterCord extends ListActivity {
 	 * @param input　入力された住所
 	 */
 	private void setAddress(String input){	
-		if(input != null) {
+		if(input != null && !input.isEmpty()) {
 			try {
 				List<Address> addresses = geocoder.getFromLocationName(input,5);
 				if(addresses != null && addresses.size() > 0) {
+					//中心地点と円をアップデートする
+					Address address = addresses.get(0);
 					MapOptions.setCenterPoint(new MarkerOptions()
 					.title(getString(R.string.center))
 					.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
-					.position(new LatLng(addresses.get(0).getLatitude(),addresses.get(0).getLongitude()))
-					.snippet(addresses.get(0).getAddressLine(0) + " " + addresses.get(0).getAddressLine(1)));
+					.position(new LatLng(address.getLatitude(),address.getLongitude()))
+					.snippet(address.getAddressLine(0) + " " + address.getAddressLine(1)));
 					MapOptions.setCenterCircle(MapOptions.getCenterCircle().center(
-							new LatLng(addresses.get(0).getLatitude(),addresses.get(0).getLongitude())));
-
-
+							MapOptions.getCenterPoint().getPosition()));
+					
+					//入力された住所がすでにdispに入っていたら、重複した要素を削除する
 					for(int i=0; i<searchHistory.size(); i++)
 					{
 						if(searchHistory.get(i).getSnippet().equals(MapOptions.getCenterPoint().getSnippet())) {
@@ -218,14 +214,12 @@ public class CenterCord extends ListActivity {
 					searchHistory.add(0,MapOptions.getCenterPoint());
 					disp.add(0,MapOptions.getCenterPoint().getSnippet());
 
+					//記録が長くなり過ぎないように２０個以上あったら一番古い要素を削除する
 					if(searchHistory.size() >= 20) {
 						searchHistory.remove(searchHistory.size()-1);
 						disp.remove(searchHistory.size()-1);
 					}
 					adapter.notifyDataSetChanged();
-
-
-					Toast.makeText(this,getString(R.string.center_point_changed), Toast.LENGTH_SHORT).show();
 				}
 				else
 					Toast.makeText(this, getString(R.string.address_not_found), Toast.LENGTH_SHORT).show();
@@ -233,25 +227,25 @@ public class CenterCord extends ListActivity {
 				e.printStackTrace();
 			}
 		}
-		if(!MapOptions.getCenterPoint().isVisible()) {
-			MapOptions.getCenterPoint().visible(true);
-		}
-		if(!MapOptions.getCenterCircle().isVisible()) {
-			MapOptions.getCenterCircle().visible(true);
-		}
+		
+		MapOptions.getCenterPoint().visible(true);
+		MapOptions.getCenterCircle().visible(true);
 
 	}
 
+	
 	/**
 	 * 中心の記録のリストから選ばれた住所を中心地点に格納する
 	 * @param position 選ばれた住所のインデックス
 	 */
 	private void setCenterFromList(int position) {
-
 		MarkerOptions newCenter = searchHistory.get(position);
-
+		
+		//選ばれた地点のインデックスに０を格納する
 		searchHistory.remove(position);
 		searchHistory.add(0,newCenter);
+		
+		//表示されている地点をリロードする
 		disp.clear();
 		for(MarkerOptions m : searchHistory) {
 			disp.add(m.getSnippet());
@@ -259,101 +253,13 @@ public class CenterCord extends ListActivity {
 		adapter.notifyDataSetInvalidated();
 		adapter.notifyDataSetChanged();
 
-		MapOptions.setCenterPoint(searchHistory.get(0));
+		//選ばれた地点をMapOptionsに格納する
+		MapOptions.setCenterPoint(searchHistory.get(0).visible(true));
 		MapOptions.setCenterCircle(MapOptions.getCenterCircle().center(
-				new LatLng(searchHistory.get(0).getPosition().latitude,searchHistory.get(0).getPosition().longitude)));
-		if(!MapOptions.getCenterPoint().isVisible()) {
-			MapOptions.getCenterPoint().visible(true);
-		}
-		if(!MapOptions.getCenterCircle().isVisible()) {
-			MapOptions.getCenterCircle().visible(true);
-		}
+				MapOptions.getCenterPoint().getPosition()).visible(true));
 	}
+
 	
-	/**
-	 * dataをテキストファイルに書き込む
-	 * @param data  書き込まれる文字列
-	 */
-	private void writeToFile(String data) {
-		try {
-			OutputStreamWriter outputStreamWriter = new OutputStreamWriter(openFileOutput(CENTER_CORD_FILE, Context.MODE_PRIVATE));
-			outputStreamWriter.write(data);
-			outputStreamWriter.close();
-		}
-		catch (IOException e) {
-			Log.e(TAG, "File write failed: " + e.toString());
-		} 
-
-	}
-
-
-	/**
-	 * テキストファイルから読み込む
-	 * @return　読み込まれた文字列
-	 */
-	private String readFromFile() {
-
-		String ret = "";
-
-		try {
-			InputStream inputStream = openFileInput(CENTER_CORD_FILE);
-
-			if ( inputStream != null ) {
-				InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
-				BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
-				String receiveString = "";
-				StringBuilder stringBuilder = new StringBuilder();
-
-				while ( (receiveString = bufferedReader.readLine()) != null ) {
-					stringBuilder.append(receiveString);
-				}
-
-				inputStream.close();
-				ret = stringBuilder.toString();
-			}
-		}
-		catch (FileNotFoundException e) {
-			Log.e(TAG, "File not found: " + e.toString());
-		} catch (IOException e) {
-			Log.e(TAG, "Can not read file: " + e.toString());
-		}
-
-		return ret;
-	}
-
-	/**
-	 * 読み込まれた文字列を解析する
-	 * 
-	 * @param text　読み込まれた文字列
-	 * @return 読み込まれた地点の記録のリスト
-	 */
-	private ArrayList<MarkerOptions> parseString (String text) {
-		ArrayList<MarkerOptions> centerHistory= new ArrayList<MarkerOptions>();
-		double lat,lon;
-		String snippit= "";
-		LatLng ltng;
-		while(text.indexOf("||") != -1)
-		{
-			lat = Double.parseDouble(text.substring(0,text.indexOf(" ")));
-			text = text.substring(text.indexOf(" ")+1);
-			lon = Double.parseDouble(text.substring(0,text.indexOf(" ")));
-			text = text.substring(text.indexOf(" ")+1);
-			ltng = new LatLng(lat,lon);
-			snippit = text.substring(0,text.indexOf("||")) + " ";
-			text = text.substring(text.indexOf("||") + 2);
-			centerHistory.add(new MarkerOptions()
-			.title(getString(R.string.center))
-			.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
-			.position(ltng)
-			.snippet(snippit.trim()));
-			lat = 0;
-			lon = 0;
-			snippit = "";
-
-		}
-		return centerHistory;
-	}
-
 	/**
 	 * dispをリセットするためのブーリアンをアップデート
 	 * @param newReset　新規のリセットのブーリアン
@@ -361,5 +267,53 @@ public class CenterCord extends ListActivity {
 	public static void setReset(boolean newReset){
 		reset = newReset;
 	}
+	
+	/**
+	 * 現在の利用者選考を保存する
+	 * @param hist 保存するリスト
+	 */
+
+	private void savePreferences(final ArrayList<MarkerOptions> hist) {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor editor = sharedPreferences.edit();
+		editor.putString("historySize",String.valueOf(hist.size()));
+		
+		//中心地点の記録のリストを読み込む
+		for(Integer i = 0; i < hist.size(); i++) {
+			editor.putString(i+"_SearchHistorySnipp", hist.get(i).getSnippet());
+			editor.putString(i+"_SearchHistoryLat", String.valueOf(searchHistory.get(i).getPosition().latitude));
+			editor.putString(i+"_SearchHistoryLon", String.valueOf(searchHistory.get(i).getPosition().longitude));
+		}
+		editor.commit();
+		System.out.println("SAVED CENTER HISTORY");
+		System.out.println(sharedPreferences.getAll());
+	}
+	
+	/**
+	 * 保存されている利用者選考を読み込む
+	 */
+
+	private void loadSavedHistory() {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		
+		String str = sharedPreferences.getString("historySize", "0");
+		int histSize = Integer.parseInt(str);
+		MarkerOptions m;
+		double lat,lng=0;
+		
+		//保存されている中心地点の記録のリスト
+		for(Integer i = 0; i<histSize; i++) {
+			lat = Double.parseDouble(sharedPreferences.getString(String.valueOf(i) + "_SearchHistoryLat","0.0"));
+			lng = Double.parseDouble(sharedPreferences.getString(String.valueOf(i) + "_SearchHistoryLon","0.0"));
+			String snippet = sharedPreferences.getString(i + "_SearchHistorySnipp","");
+			m = new MarkerOptions();
+			m.position(new LatLng(lat,lng));
+			m.snippet(snippet);
+			m.title(getString(R.string.center));
+			m.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW));
+			searchHistory.add(m);
+		}
+	}
+
 
 }

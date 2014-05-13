@@ -46,17 +46,19 @@ public class MapOptions {
 	 */
 	public static void addPoint(MarkerOptions mo,Context context) {
 		MarkerOptions temp = mo;
-		if(calculationByDistance(mo.getPosition(),centerPoint.getPosition()) < circleRadius)
+		LatLng centerPtPos = centerPoint.getPosition();
+		
+		//追加する地点の色を決める
+		if(calculationByDistance(mo.getPosition(),centerPtPos) < circleRadius)
 			temp.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN));
 		else
 			temp.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
 
-		if(centerPoint.isVisible())
-		{
-			double dtc = (double)Math.round(calculationByDistance(mo.getPosition(),centerPoint.getPosition()) * 100000) / 100000;
-			temp.snippet(context.getString(R.string.dist_to_center) + ": " + String.valueOf(dtc) + " km");
+		if(centerPoint.isVisible()) {
+			double dtc = (double)Math.round(calculationByDistance(mo.getPosition(),centerPtPos) * 100000) / 100000;
+			temp.snippet(context.getString(R.string.dist_to_center)
+					+ ": " + String.valueOf(dtc) + " km");
 		}
-
 		points.add(0,temp);
 	}
 
@@ -91,23 +93,27 @@ public class MapOptions {
 
 
 	/**
-	 * 円の南半分の地点を東から西までソートするためのメソッド。
+	 * 円の南半分の地点を東から西まで挿入ソートするためのメソッド。
 	 * ニコちゃんマーク作成方法。
 	 * 
 	 * @return  ソート済みリスト
 	 */
 	public static ArrayList<MarkerOptions> getSortedBottomPoints() {
 		ArrayList<MarkerOptions> bottomPoints = new ArrayList<MarkerOptions>();
+		LatLng centerPtPos = centerPoint.getPosition();
+		
 		for(MarkerOptions m:points) {
-			if(calculationByDistance(m.getPosition(),centerPoint.getPosition()) < circleRadius &&
-					m.getPosition().latitude < centerPoint.getPosition().latitude)
+			if(calculationByDistance(m.getPosition(),centerPtPos) < circleRadius &&
+					m.getPosition().latitude < centerPtPos.latitude)
 				bottomPoints.add(m);
 		}
+		
 		int i,j;
 		MarkerOptions key;
 		for(j=1; j<bottomPoints.size(); j++) {
 			key = bottomPoints.get(j);
-			for(i=j-1; (i >= 0) && (bottomPoints.get(i).getPosition().longitude < key.getPosition().longitude); i--) {
+			for(i=j-1; (i >= 0) && (bottomPoints.get(i).getPosition().longitude < 
+					key.getPosition().longitude); i--) {
 				bottomPoints.set(i+1, bottomPoints.get(i));
 			}
 			bottomPoints.set(i+1,key);
@@ -170,7 +176,7 @@ public class MapOptions {
 	 * @return StartPとEndPの距離（km）
 	 */
 	public static double calculationByDistance(LatLng StartP, LatLng EndP) {
-		int Radius=6371;//radius of earth in Km         
+		int Radius=6371; //地球の半径
 		double lat1 = StartP.latitude;
 		double lat2 = EndP.latitude;
 		double lon1 = StartP.longitude;

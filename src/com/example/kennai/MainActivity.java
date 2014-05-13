@@ -1,17 +1,15 @@
 package com.example.kennai;
 
-import java.io.BufferedReader;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -72,11 +70,11 @@ public class MainActivity extends Activity {
 		setContentView(R.layout.activity_main);
 		smiley=MapOptions.isSmileyMode();
 		MapsInitializer.initialize(getApplicationContext());
+		
+		//一番最初に実行する時だけ設定の記録を読み込む
 		if(onFirstRunOne) {
-			String settingsFile = readFromFile();
-			if(settingsFile!="")
-				parseString(settingsFile);
-			else
+			loadSavedPreferences();
+			if(MapOptions.getCenterPoint().getSnippet()=="")
 				setUpOptions();
 			onFirstRunOne = false;
 		}
@@ -94,6 +92,7 @@ public class MainActivity extends Activity {
 		map.setMapType(MapOptions.getMapType());
 		map.clear();
 
+		//設定でリセットボタンを押したら、マップのカメラをアップデートする
 		if(reset) {
 			writeToFile("");
 			map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(
@@ -108,8 +107,8 @@ public class MainActivity extends Activity {
 			map.addMarker(m);
 		}
 
-
 		if(MapOptions.getCenterPoint().isVisible()) { 
+			//設定でニコちゃんモードがアップデートされたらここもアップデートされる
 			if(smiley != MapOptions.isSmileyMode()) {
 				smiley = MapOptions.isSmileyMode();
 			}
@@ -129,10 +128,14 @@ public class MainActivity extends Activity {
 				drawSmiley();
 			}
 		}
+		
+		//一番最初に実行する時だけズームをアップデートしない
 		if(notOnFirstRun) {
 			updateZoom();
 		}
 		notOnFirstRun = true;
+		
+		//保存する
 		saveInfo();
 	}
 
@@ -183,27 +186,31 @@ public class MainActivity extends Activity {
 	}
 
 	/**
-	 * テキストファイルに全ての情報を書き込む
+	 * SharedPreferencesに全ての情報を書き込む
 	 */
 	private void saveInfo() {
 		if(MapOptions.getCenterPoint().isVisible()) {
-			String toFile = "";
-			toFile += String.valueOf(MapOptions.getMapType()) + "|";
-			toFile += String.valueOf(MapOptions.getCircleRadius()) + "|";
-			toFile += String.valueOf(MapOptions.isSmileyMode()) + "|";
-			toFile += String.valueOf(MapOptions.getCenterPoint().getPosition().latitude) + "|";
-			toFile += String.valueOf(MapOptions.getCenterPoint().getPosition().longitude) + "|";
-			toFile += MapOptions.getCenterPoint().getSnippet()+"|";
-			toFile += MapOptions.getCenterPoint().getTitle()+"|";
-			for(MarkerOptions m : MapOptions.getPoints()) {
-				toFile += String.valueOf(m.getPosition().latitude) + "|";
-				toFile += String.valueOf(m.getPosition().longitude) + "|"; 
-				toFile += m.getTitle() + "|";
+			savePreferences("mapType",MapOptions.getMapType());
+			savePreferences("smileyMode",MapOptions.isSmileyMode());
+			savePreferences("circleRadius",String.valueOf(MapOptions.getCircleRadius()));
+			
+			//中心地点の情報
+			savePreferences("centerPointLat",String.valueOf(
+					MapOptions.getCenterPoint().getPosition().latitude));
+			savePreferences("centerPointLon",String.valueOf(
+					MapOptions.getCenterPoint().getPosition().longitude));
+			savePreferences("centerPointSnippit",MapOptions.getCenterPoint().getSnippet());
+			savePreferences("centerPointTitle",MapOptions.getCenterPoint().getTitle());
+			
+			//地点のリストの情報
+			savePreferences("pointsListSize",MapOptions.getPoints().size());
+			ArrayList<MarkerOptions> pts = MapOptions.getPoints();
+			for(int i=0; i<pts.size(); i++){
+				savePreferences(i+"_PointListTitle", pts.get(i).getTitle());
+				savePreferences(i+"_PointListLat", String.valueOf(pts.get(i).getPosition().latitude));
+				savePreferences(i+"_PointListLon", String.valueOf(pts.get(i).getPosition().longitude));
 			}
-			writeToFile(toFile);
 		}
-		else
-			writeToFile("");
 	}
 
 	/**
@@ -215,24 +222,29 @@ public class MainActivity extends Activity {
 	 */
 	private boolean qualifySmiley(){
 		ArrayList<MarkerOptions> drawPoints = MapOptions.getInsidePoints();
-		int topRight = 0;
-		int topLeft = 0;
-		int bottom = 0;
+		
+		int topRight,topLeft,bottom;
+		topRight = topLeft = bottom = 0;
 		MarkerOptions cP = MapOptions.getCenterPoint();
+		
+		LatLng centerPosition = cP.getPosition();
+		LatLng tempPosition;
+		
+		//四分円によって地点を数える
 		for(MarkerOptions m:drawPoints) {
-			if(m.getPosition().latitude > cP.getPosition().latitude &&
-					m.getPosition().longitude > cP.getPosition().longitude)
+			tempPosition = m.getPosition();
+			if(tempPosition.latitude > centerPosition.latitude &&
+					tempPosition.longitude > centerPosition.longitude)
 				topRight ++;
-			else if(m.getPosition().latitude > cP.getPosition().latitude &&
-					m.getPosition().longitude < cP.getPosition().longitude)
+			else if(tempPosition.latitude > centerPosition.latitude &&
+					tempPosition.longitude < centerPosition.longitude)
 				topLeft ++;
 			else
 				bottom ++;
 		}
-		if(topRight == 1 && topLeft == 1 && bottom >1 && bottom<6)
-			return true;
-		else
-			return false;
+		
+		//ニコちゃんが可能かどうかをリターンする
+		return topRight == 1 && topLeft == 1 && bottom >1 && bottom<6;
 	}
 
 	/**
@@ -241,7 +253,7 @@ public class MainActivity extends Activity {
 	private void drawSmiley() {
 		map.clear();
 		Toast.makeText(this, getString(R.string.smile), Toast.LENGTH_SHORT).show();
-		
+
 		//中心地点
 		BitmapDescriptor cBD = MapOptions.getCenterPoint().getIcon();
 		MapOptions.setCenterPoint(MapOptions.getCenterPoint().icon(cBD));
@@ -270,21 +282,23 @@ public class MainActivity extends Activity {
 		rectOptions.width(10);
 		map.addPolyline(rectOptions);
 	}
-	
+
 	/**
 	 * マップのズームをアップデートする
 	 */
 	private void updateZoom() {
 		LatLngBounds.Builder bc = new LatLngBounds.Builder();
-		CircleOptions cc = MapOptions.getCenterCircle();
+		CircleOptions centerCircle = MapOptions.getCenterCircle();
 
 		//中心地点が見える場合は円にズームする
 		if(MapOptions.getCenterPoint().isVisible()) {
 			for(int i=0;i<4;i++) {
-				bc.include(MapOptions.CalculateDerivedPosition(cc.getCenter(),MapOptions.getCircleRadius()*1000,90*i));
+				bc.include(MapOptions.CalculateDerivedPosition(centerCircle.getCenter(),
+						MapOptions.getCircleRadius()*1000,90*i));
 			}
 			map.moveCamera(CameraUpdateFactory.newLatLngBounds(bc.build(), 50));
 		}
+		
 		//中心地点が見えなくて、他の地点がある場合はその地点にズームする
 		else if(MapOptions.getPoints().size() > 0){
 			for(MarkerOptions m : MapOptions.getPoints()) {
@@ -305,13 +319,13 @@ public class MainActivity extends Activity {
 				map.getUiSettings().setAllGesturesEnabled(true);
 				map.setMyLocationEnabled(true);
 				if(!MapOptions.getCenterPoint().isVisible()) {
-					map.moveCamera(CameraUpdateFactory.newLatLngZoom(MapOptions.getCenterPoint().getPosition(), 1));
+					map.moveCamera(CameraUpdateFactory.newLatLngZoom(
+							MapOptions.getCenterPoint().getPosition(), 1));
 				}
 				map.setOnCameraChangeListener(new OnCameraChangeListener() {
 					@Override
 					public void onCameraChange(CameraPosition arg0) {
 						updateZoom();
-						// Remove listener to prevent position reset on camera move.
 						map.setOnCameraChangeListener(null);
 					}
 				});
@@ -321,18 +335,25 @@ public class MainActivity extends Activity {
 
 	/**
 	 * 初期設定
+	 * 中心地点は見えれなくて、黄色で（0,0）にある
+	 * 円の半径は一キロで緑で中心地点のとこりにある
+	 * ニコちゃんモードはオフ
+	 * 
 	 */
 	private void setUpOptions() {
+		//中心地点
 		MapOptions.setCenterPoint(new MarkerOptions()
 		.visible(false)
 		.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
 		.position(new LatLng(0,0)));
+		//円
 		MapOptions.setCenterCircle(new CircleOptions()
 		.center(MapOptions.getCenterPoint().getPosition())
 		.radius(MapOptions.getCircleRadius() * 1000.0)
 		.fillColor(0x95c2ffc2)
 		.strokeWidth(2)
 		.visible(false));
+		//ニコチャンモード
 		MapOptions.setSmileyMode(false);
 	}
 
@@ -353,86 +374,86 @@ public class MainActivity extends Activity {
 	}
 
 	/**
-	 * テキストファイルから読み込む
-	 * @return　読み込まれた文字列
+	 * 指定された整数を保存する
+	 * @param hist 保存するリスト
 	 */
-	private String readFromFile() {
-
-		String ret = "";
-
-		try {
-			InputStream inputStream = openFileInput(SETTINGS_FILE);
-
-			if ( inputStream != null ) {
-				InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
-				BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
-				String receiveString = "";
-				StringBuilder stringBuilder = new StringBuilder();
-
-				while ( (receiveString = bufferedReader.readLine()) != null ) {
-					stringBuilder.append(receiveString);
-				}
-
-				inputStream.close();
-				ret = stringBuilder.toString();
-			}
-		}
-		catch (FileNotFoundException e) {
-			Log.e(TAG, "File not found: " + e.toString());
-		} catch (IOException e) {
-			Log.e(TAG, "Can not read file: " + e.toString());
-		}
-
-		return ret;
+	private void savePreferences(String key, int value) {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor editor = sharedPreferences.edit();
+		editor.putInt(key, value);
+		editor.commit();
+	}
+	
+	/**
+	 * 指定されたStringを保存する
+	 * @param hist 保存するリスト
+	 */
+	private void savePreferences(String key, String value) {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor editor = sharedPreferences.edit();
+		editor.putString(key, value);
+		editor.commit();
 	}
 
 	/**
-	 * 読み込まれた文字列を解析する
-	 * 
-	 * @param text　読み込まれた文字列
+	 * 指定されたBooleanを保存する
+	 * @param hist 保存するリスト
 	 */
-	private void parseString (String text) {
-		MapOptions.setMapType(Integer.parseInt(text.substring(0,text.indexOf("|"))));
-		text = text.substring(text.indexOf("|")+1);
-		MapOptions.setCircleRadius(Double.parseDouble(text.substring(0,text.indexOf("|"))));
-		text = text.substring(text.indexOf("|")+1);
-		MapOptions.setSmileyMode(Boolean.parseBoolean(text.substring(0,text.indexOf("|"))));
-		text = text.substring(text.indexOf("|")+1);
-		double savedLat = Double.parseDouble(text.substring(0,text.indexOf("|")));
-		text = text.substring(text.indexOf("|")+1);
-		double savedLon = Double.parseDouble(text.substring(0,text.indexOf("|")));
-		text = text.substring(text.indexOf("|")+1);
-		String savedSnip = text.substring(0,text.indexOf("|"));
-		text = text.substring(text.indexOf("|")+1);
-		String savedTitle = text.substring(0,text.indexOf("|"));
-		text = text.substring(text.indexOf("|")+1);
+	private void savePreferences(String key, Boolean value) {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor editor = sharedPreferences.edit();
+		editor.putBoolean(key, value);
+		editor.commit();
+	}
+	
+	/**
+	 * 保存されている利用者選考を読み込む
+	 */
+	private void loadSavedPreferences() {
+		SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this);
+		
+		//マップの情報
+		MapOptions.setMapType(sharedPreferences.getInt("mapType", 1));
+		MapOptions.setSmileyMode(sharedPreferences.getBoolean("smileyMode", false));
+		MapOptions.setCircleRadius(Double.parseDouble(sharedPreferences.getString("circleRadius", "1.0f")));
+		
+		//中心地点の情報
+		double centerPointLat = Double.parseDouble(sharedPreferences.getString("centerPointLat", "0.0f"));
+		double centerPointLon = Double.parseDouble(sharedPreferences.getString("centerPointLon", "0.0f"));
+		String centerPointTitle = sharedPreferences.getString("centerPointTitle", "");
+		String centerPointSnippit = sharedPreferences.getString("centerPointSnippit", "");
 
+		//読み込んだ中心地点の情報を格納する
 		MapOptions.setCenterPoint(new MarkerOptions()
-		.position(new LatLng(savedLat,savedLon))
-		.title(savedTitle)
+		.position(new LatLng(centerPointLat,centerPointLon))
+		.title(centerPointTitle)
 		.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW))
 		.visible(true)
-		.snippet(savedSnip));
+		.snippet(centerPointSnippit));
+		
+		//円の情報を格納する
 		MapOptions.setCenterCircle(new CircleOptions()
 		.center(MapOptions.getCenterPoint().getPosition())
 		.radius(MapOptions.getCircleRadius() * 1000.0)
 		.fillColor(0x95c2ffc2)
 		.strokeWidth(2)
 		.visible(true));
-
-		while(text.indexOf("|") != -1)
-		{
-			double pointLat = Double.parseDouble(text.substring(0,text.indexOf("|")));
-			text = text.substring(text.indexOf("|")+1);
-			double pointLon = Double.parseDouble(text.substring(0,text.indexOf("|")));
-			text = text.substring(text.indexOf("|")+1);
-			String pointTitle = text.substring(0,text.indexOf("|"));
-			text = text.substring(text.indexOf("|")+1);
-			MapOptions.addPoint(new MarkerOptions()
-			.position(new LatLng(pointLat,pointLon))
-			.title(pointTitle),getApplicationContext());
+		
+		//マップにある地点
+		int pointsSize = sharedPreferences.getInt("pointsListSize", 0);
+		MarkerOptions mp;
+		double pointLat,pointLon;
+		MapOptions.clearPoints();
+		for (int i = pointsSize-1; i>=0; i--) {
+			mp = new MarkerOptions();
+			String title = sharedPreferences.getString(i+"_PointListTitle", "");
+			pointLat = Double.parseDouble(sharedPreferences.getString(i+"_PointListLat", "0.0f"));
+			pointLon = Double.parseDouble(sharedPreferences.getString(i+"_PointListLon", "0.0f"));
+			mp.position(new LatLng(pointLat,pointLon));
+			mp.title(title);
+			MapOptions.addPoint(mp,getApplicationContext());
 		}
-
+		
 	}
-
 }
+
