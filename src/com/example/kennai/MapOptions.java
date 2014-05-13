@@ -134,12 +134,11 @@ public class MapOptions {
 				m.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED));
 			if(centerPoint.isVisible())
 			{
-				double dtc = (double)Math.round(calculationByDistance(m.getPosition(),centerPoint.getPosition()) * 100000) / 100000;
-				m.snippet(context.getString(R.string.dist_to_center)+": " + String.valueOf(dtc) + " km");
+				double distToCenter = (double)Math.round(calculationByDistance(m.getPosition(),centerPoint.getPosition()) * 100000) / 100000;
+				m.snippet(context.getString(R.string.dist_to_center)+": " + String.valueOf(distToCenter) + " km");
 			}
 		}
 	}
-
 
 	/**
 	 * ソースから目的地の緯度経度をソースとの間の距離、角度を使って計算する

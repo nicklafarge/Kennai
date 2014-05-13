@@ -178,11 +178,14 @@ public class AddPoints extends ListActivity {
 					.title(String.valueOf(addresses.get(0).getAddressLine(0)))
 					.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)),getApplicationContext());
 					disp.add(0,MapOptions.getMostRecentPoint().getTitle());
+					
+					//検索した住所がすでにマップにあったら、ユーザーに知らせません
 					if(newPoint)
 						Toast.makeText(this, getString(R.string.point_added), Toast.LENGTH_SHORT).show();
 				}
 				else
 					Toast.makeText(this, getString(R.string.address_not_found), Toast.LENGTH_SHORT).show();
+				
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
